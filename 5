@@ -1,0 +1,50 @@
+import stripe
+from django.conf import settings
+from django.shortcuts import render, redirect
+from .models import Product, Subscription
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
+
+def product_list(request):
+    products = Product.objects.all()
+    return render(request, 'products/product_list.html', {'products': products})
+
+def checkout(request):
+    if request.method == 'POST':
+        stripe_token = request.POST['stripeToken']
+        subscription_type = request.POST['subscription_type']
+        
+        customer = stripe.Customer.create(
+            email=request.user.email,
+            source=stripe_token,
+        )
+
+        price = 1000 if subscription_type == 'monthly' else 10000  # Prices in cents
+
+        charge = stripe.Charge.create(
+            customer=customer.id,
+            amount=price,
+            currency='inr',  # Indian Rupee
+            description='Subscription Charge',
+        )
+
+        subscription = Subscription(user=request.user, subscription_type=subscription_type)
+        subscription.save()
+
+        return redirect('product_list')
+
+    return render(request, 'products/checkout.html', {'publishable_key': settings.STRIPE_PUBLISHABLE_KEY})
+
+def product_create(request):
+    if request.method == 'POST':
+        name = request.POST['name']
+        description = request.POST['description']
+        price = request.POST['price']
+        image = request.FILES.get('image')
+        video = request.FILES.get('video')
+
+        product = Product(name=name, description=description, price=price, seller=request.user, image=image, video=video)
+        product.save()
+        return redirect('product_list')
+
+    return render(request, 'products/product_create.html')
